@@ -54,8 +54,7 @@ find_package(Threads REQUIRED)
 target_link_libraries(cpu_check Threads::Threads)
 
 # Needs zlib
-# Don't mark "REQUIRED" since Linux distros bundle this up somehow.
-find_package (ZLIB)
+find_package (ZLIB REQUIRED)
 if(ZLIB_INCLUDE_DIRS)
 	include_directories(${ZLIB_INCLUDE_DIRS})
 endif(ZLIB_INCLUDE_DIRS)
