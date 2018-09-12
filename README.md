@@ -26,15 +26,26 @@ Designed to run under Unix/Linux OS. There is a preference for the Clang/LLVM co
 * zlib
 * OpenSSL
 
+## Building
+
+```
+sh$ git clone git@github.com:stixpjr/cpu_check.git
+sh$ cd cpu_check
+sh$ mkdir build
+sh$ cd build
+sh$ cmake ..
+sh$ make
+```
+
 ## TODO:
 
 * Use git submodules for:
- * farmhash: https://github.com/google/farmhash
- * highwayhash: https://github.com/google/highwayhash
- * crc32c: https://github.com/google/crc32c
- * cityhash: https://github.com/google/cityhash
- * brotli: https://github.com/google/brotli
- * gipfeli: https://github.com/google/gipfeli
+  * farmhash: https://github.com/google/farmhash
+  * highwayhash: https://github.com/google/highwayhash
+  * crc32c: https://github.com/google/crc32c
+  * cityhash: https://github.com/google/cityhash
+  * brotli: https://github.com/google/brotli
+  * gipfeli: https://github.com/google/gipfeli
 * Expand encryption coverage - find those algorithms that stress the HW.
 * flags to enable/disable steps, eg. encryption.
 * flags controlling min/max buffer size.
