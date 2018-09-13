@@ -47,5 +47,6 @@ sh$ make
   * brotli: https://github.com/google/brotli
   * gipfeli: https://github.com/google/gipfeli
 * Expand encryption coverage - find those algorithms that stress the HW.
-* flags to enable/disable steps, eg. encryption.
-* flags controlling min/max buffer size.
+* Flags to enable/disable steps, eg. encryption.
+* Flags controlling min/max buffer size.
+* Use cpuid to dynamically select appropriate instruction set extensions.
