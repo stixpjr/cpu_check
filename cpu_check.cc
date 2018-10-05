@@ -1,3 +1,4 @@
+#include <sys/mman.h>
 #include <sys/resource.h>
 #include <sys/time.h>
 #include <sys/types.h>
@@ -406,6 +407,12 @@ void Worker::Run() {
     // Make a copy.
     // Do the copy in two steps, stress alignment handling.
     dst_buf.resize(src_buf.size());
+    // Half the time, tell the OS to release the destination buffer.
+    if (std::uniform_int_distribution<int>(0, 1)(rndeng_)) {
+      if (madvise(&dst_buf[0], dst_buf.size(), MADV_DONTNEED) == -1) {
+        LOG(WARN) << "tid " << tid_ << " madvise(MADV_DONTNEED) failed: " << errno;
+      }
+    }
     int offset =
         std::uniform_int_distribution<int>(1, src_buf.size() - 1)(rndeng_);
 #if defined(__i386__) || defined(__x86_64__)
