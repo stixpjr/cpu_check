@@ -319,6 +319,7 @@ void Worker::Run() {
   EVP_CIPHER_CTX *cipher_ctx;
   cipher_ctx = EVP_CIPHER_CTX_new();
   std::string src_buf, dst_buf;
+  long pagesize = sysconf(_SC_PAGESIZE);
 
   while (!exiting) {
     if (std::thread::hardware_concurrency() > 1) {
@@ -409,8 +410,15 @@ void Worker::Run() {
     dst_buf.resize(src_buf.size());
     // Half the time, tell the OS to release the destination buffer.
     if (std::uniform_int_distribution<int>(0, 1)(rndeng_)) {
-      if (madvise(&dst_buf[0], dst_buf.size(), MADV_DONTNEED) == -1) {
-        LOG(WARN) << "tid " << tid_ << " madvise(MADV_DONTNEED) failed: " << errno;
+      // Round up the buffer start address to a page boundary.
+      intptr_t start = ((intptr_t)&dst_buf[0] + pagesize - 1) & ~(pagesize - 1);
+      // Round down the buffer end address to a page boundary.
+      intptr_t end = ((intptr_t)&dst_buf[dst_buf.size() - 1]) & ~(pagesize - 1);
+      if (end - start >= pagesize) {
+        if (madvise((char *)start, end - start, MADV_DONTNEED) == -1) {
+          LOG(WARN) << "tid " << tid_
+                    << " madvise(MADV_DONTNEED) failed: " << strerror(errno);
+        }
       }
     }
     int offset =
