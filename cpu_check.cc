@@ -135,6 +135,7 @@ class Worker {
  private:
   void FillBufferRandomData(std::string *s);
   void FillBufferRandomText(std::string *s);
+  void MaybeMadviseDontNeed(std::string *s);
 
   int tid_;
   std::vector<std::string> *words_;
@@ -174,6 +175,24 @@ void Worker::FillBufferRandomText(std::string *s) {
   while (pos < bufsize) {
     (*s)[pos++] = ' ';
   }
+}
+
+void Worker::MaybeMadviseDontNeed(std::string *s) {
+  static long pagesize = sysconf(_SC_PAGESIZE);
+  // Half the time, tell the OS to release the destination buffer.
+  if (std::uniform_int_distribution<int>(0, 1)(rndeng_)) {
+    // Round up the buffer start address to a page boundary.
+    intptr_t start = ((intptr_t)&(*s)[0] + pagesize - 1) & ~(pagesize - 1);
+    // Round down the buffer end address to a page boundary.
+    intptr_t end = ((intptr_t)&(*s)[s->size() - 1]) & ~(pagesize - 1);
+    if (end - start >= pagesize) {
+      if (madvise((char *)start, end - start, MADV_DONTNEED) == -1) {
+        LOG(WARN) << "tid " << tid_
+                  << " madvise(MADV_DONTNEED) failed: " << strerror(errno);
+      }
+    }
+  }
+
 }
 
 std::string OpenSSL_Hash(const std::string &s, const EVP_MD *type) {
@@ -319,7 +338,6 @@ void Worker::Run() {
   EVP_CIPHER_CTX *cipher_ctx;
   cipher_ctx = EVP_CIPHER_CTX_new();
   std::string src_buf, dst_buf;
-  long pagesize = sysconf(_SC_PAGESIZE);
 
   while (!exiting) {
     if (std::thread::hardware_concurrency() > 1) {
@@ -376,6 +394,7 @@ void Worker::Run() {
                       (unsigned char *)ivec.data(), 1);
 
     dst_buf.resize(src_buf.size());
+    MaybeMadviseDontNeed(&dst_buf);
     if (EVP_CipherUpdate(cipher_ctx, (unsigned char *)&dst_buf[0], &enc_len,
                          (unsigned char *)src_buf.data(),
                          src_buf.size()) != 1) {
@@ -408,19 +427,7 @@ void Worker::Run() {
     // Make a copy.
     // Do the copy in two steps, stress alignment handling.
     dst_buf.resize(src_buf.size());
-    // Half the time, tell the OS to release the destination buffer.
-    if (std::uniform_int_distribution<int>(0, 1)(rndeng_)) {
-      // Round up the buffer start address to a page boundary.
-      intptr_t start = ((intptr_t)&dst_buf[0] + pagesize - 1) & ~(pagesize - 1);
-      // Round down the buffer end address to a page boundary.
-      intptr_t end = ((intptr_t)&dst_buf[dst_buf.size() - 1]) & ~(pagesize - 1);
-      if (end - start >= pagesize) {
-        if (madvise((char *)start, end - start, MADV_DONTNEED) == -1) {
-          LOG(WARN) << "tid " << tid_
-                    << " madvise(MADV_DONTNEED) failed: " << strerror(errno);
-        }
-      }
-    }
+    MaybeMadviseDontNeed(&dst_buf);
     int offset =
         std::uniform_int_distribution<int>(1, src_buf.size() - 1)(rndeng_);
 #if defined(__i386__) || defined(__x86_64__)
@@ -456,6 +463,7 @@ void Worker::Run() {
     EVP_CipherInit_ex(cipher_ctx, EVP_aes_256_gcm(), NULL, key,
                       (unsigned char *)ivec.data(), 0);
     dst_buf.resize(src_buf.size());
+    MaybeMadviseDontNeed(&dst_buf);
     if (EVP_CIPHER_CTX_ctrl(cipher_ctx, EVP_CTRL_GCM_SET_TAG, 16, gmac) != 1) {
       LOG(ERROR) << "tid " << tid_ << " EVP_CTRL_GCM_SET_TAG failed.";
       errorCount++;
@@ -481,6 +489,7 @@ void Worker::Run() {
     // Run decompressor.
 
     dst_buf.resize(bufsize);
+    MaybeMadviseDontNeed(&dst_buf);
     err = comp.dec(&dst_buf, src_buf);
     std::swap(src_buf, dst_buf);
     dst_buf.clear();
