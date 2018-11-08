@@ -21,6 +21,7 @@
 #include <list>
 #include <mutex>
 #include <random>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <utility>
@@ -182,9 +183,9 @@ void Worker::MaybeMadviseDontNeed(std::string *s) {
   // Half the time, tell the OS to release the destination buffer.
   if (std::uniform_int_distribution<int>(0, 1)(rndeng_)) {
     // Round up the buffer start address to a page boundary.
-    intptr_t start = ((intptr_t)&(*s)[0] + pagesize - 1) & ~(pagesize - 1);
+    intptr_t start = ((intptr_t) & (*s)[0] + pagesize - 1) & ~(pagesize - 1);
     // Round down the buffer end address to a page boundary.
-    intptr_t end = ((intptr_t)&(*s)[s->size() - 1]) & ~(pagesize - 1);
+    intptr_t end = ((intptr_t) & (*s)[s->size() - 1]) & ~(pagesize - 1);
     if (end - start >= pagesize) {
       if (madvise((char *)start, end - start, MADV_DONTNEED) == -1) {
         LOG(WARN) << "tid " << tid_
@@ -192,7 +193,6 @@ void Worker::MaybeMadviseDontNeed(std::string *s) {
       }
     }
   }
-
 }
 
 std::string OpenSSL_Hash(const std::string &s, const EVP_MD *type) {
@@ -457,6 +457,10 @@ void Worker::Run() {
       SetAffinity(newcpu);
     }
 
+    std::stringstream writer_reader;
+    writer_reader << "CPUs writer (tid " << tid_ << "), reader (tid " << newcpu
+                  << ")";
+
     // Decrypt.
 
     int dec_len;
@@ -494,17 +498,16 @@ void Worker::Run() {
     std::swap(src_buf, dst_buf);
     dst_buf.clear();
     if (err) {
-      LOG(ERROR) << "tid " << tid_ << " cpu " << newcpu << " " << gen.name
-                 << " size " << bufsize << " " << comp.name
-                 << " uncompression failed: " << err;
+      LOG(ERROR) << gen.name << " size " << bufsize << " " << comp.name
+                 << " uncompression failed: " << err << ". "
+                 << writer_reader.str();
       errorCount++;
       continue;
     }
     if (src_buf.size() != bufsize) {
-      LOG(ERROR) << "tid " << tid_ << " cpu " << newcpu << " " << gen.name
-                 << " " << comp.name
+      LOG(ERROR) << gen.name << " " << comp.name
                  << " uncompressed buffer size mismatch: should be " << bufsize
-                 << " got " << src_buf.size() << ".";
+                 << " got " << src_buf.size() << ". " << writer_reader.str();
       errorCount++;
       continue;
     }
@@ -517,11 +520,9 @@ void Worker::Run() {
       if (exiting) break;
       std::string hash = hashers[i].func(src_buf);
       if (hashes[i] != hash) {
-        LOG(ERROR) << "tid " << tid_ << " cpu " << newcpu << " " << gen.name
-                   << " size " << bufsize << " " << comp.name << " "
-                   << hashers[i].name << " hash mismatch.";
-        LOG(ERROR) << "Got: " << hash;
-        LOG(ERROR) << "Should be: " << hashes[i];
+        LOG(ERROR) << gen.name << " size " << bufsize << " " << comp.name << " "
+                   << hashers[i].name << " hash mismatch (" << hash << " vs "
+                   << hashes[i] << writer_reader.str();
         error = true;
         errorCount++;
       }
