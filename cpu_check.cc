@@ -67,7 +67,7 @@ std::atomic_uintmax_t errorCount(0);
 std::atomic_uintmax_t successCount(0);
 
 bool SetAffinity(int id) {
-  int err;
+  int err = 0;
 #ifdef __linux__
   cpu_set_t cset;
   CPU_ZERO(&cset);
