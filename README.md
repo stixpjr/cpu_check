@@ -37,6 +37,16 @@ sh$ cmake ..
 sh$ make
 ```
 
+## Options
+
+Some options have been implememented that affect the build, which may be passed
+to cmake via, eg:
+
+```cmake -DCMAKE_BUILD_TYPE=(Debug|Release)```
+
+* CMAKE_BUILD_TYPE=(Release|Debug)
+* USE_CLANG=(ON|OFF)
+
 ## TODO:
 
 * Use git submodules for:

@@ -360,8 +360,6 @@ void Worker::Run() {
     for (uint32_t i = 0; i < hashers.size(); i++) {
       if (exiting) break;
       hashes[i] = hashers[i].func(src_buf);
-      // LOG(DEBUG) << "Hash " << hashers[i].name << ": " << hashes[i] << ".";
-      // XXX
     }
     LOG(DEBUG) << "tid " << tid_ << " initial hashes done.";
     if (exiting) break;
@@ -389,7 +387,7 @@ void Worker::Run() {
     unsigned char gmac[14];
     FillBufferRandomData(&ivec);
 
-    int enc_len, enc_unused_len;
+    int enc_len = 0, enc_unused_len = 0;
     EVP_CipherInit_ex(cipher_ctx, EVP_aes_256_gcm(), NULL, key,
                       (unsigned char *)ivec.data(), 1);
 
@@ -407,6 +405,13 @@ void Worker::Run() {
     if (EVP_CipherFinal_ex(cipher_ctx, nullptr, &enc_unused_len) != 1) {
       LOG(ERROR) << "tid " << tid_ << " encrypt EVP_CipherFinal_ex failed.";
       errorCount++;
+      EVP_CIPHER_CTX_cleanup(cipher_ctx);
+      dst_buf.erase();
+      continue;
+    }
+    enc_len += enc_unused_len;
+    if (enc_len != (int) dst_buf.size()) {
+      LOG(ERROR) << "tid " << tid_ << " encrypt length mismatch: " << enc_len << " vs " << dst_buf.size();
       EVP_CIPHER_CTX_cleanup(cipher_ctx);
       dst_buf.erase();
       continue;
@@ -463,7 +468,7 @@ void Worker::Run() {
 
     // Decrypt.
 
-    int dec_len;
+    int dec_len = 0, dec_extra_len = 0;
     EVP_CipherInit_ex(cipher_ctx, EVP_aes_256_gcm(), NULL, key,
                       (unsigned char *)ivec.data(), 0);
     dst_buf.resize(src_buf.size());
@@ -484,7 +489,20 @@ void Worker::Run() {
       dst_buf.erase();
       continue;
     }
+    if (EVP_CipherFinal_ex(cipher_ctx, (unsigned char *)&dst_buf[dec_len], &dec_extra_len) != 1) {
+      LOG(ERROR) << "tid " << tid_ << " decrypt EVP_CipherFinal_ex failed.";
+      errorCount++;
+      EVP_CIPHER_CTX_cleanup(cipher_ctx);
+      dst_buf.erase();
+      continue;
+    }
+    dec_len += dec_extra_len;
     EVP_CIPHER_CTX_cleanup(cipher_ctx);
+    if (dec_len != (int) dst_buf.size()) {
+      LOG(ERROR) << "tid " << tid_ << " decrypt length mismatch: " << dec_len << " vs " << dst_buf.size();
+      dst_buf.erase();
+      continue;
+    }
     std::swap(src_buf, dst_buf);
     dst_buf.clear();
     LOG(DEBUG) << "tid " << tid_ << " dencrypt done.";

@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
   for (int i = 0; i < 100; i++) {
     size_t len = size_dist(rndeng);
     buf.resize(len);
-    for (int j = 0; j < len; j++) {
+    for (size_t j = 0; j < len; j++) {
       buf[j] = d_dist(rndeng);
     }
     uint32_t crc_hw = crc32c_hw(buf.data(), len);
