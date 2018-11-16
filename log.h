@@ -42,7 +42,7 @@ static LOG_LEVEL min_log_level = INFO;
 
 class Log {
  public:
-  Log(const char* file, int line, LOG_LEVEL lvl) : lvl_(lvl), os_(&sb_) {
+  Log(const char* file, int line, LOG_LEVEL lvl) : lvl_(lvl) {
     if (lvl < min_log_level) {
       skip_ = true;
       return;
@@ -52,7 +52,7 @@ class Log {
   // For LOG_EVERY_N:
   Log(const char* file, int line, LOG_LEVEL lvl, std::atomic<uint64_t>& cnt,
       int N)
-      : lvl_(lvl), os_(&sb_) {
+      : lvl_(lvl) {
     if (lvl < min_log_level) {
       skip_ = true;
       return;
@@ -65,7 +65,7 @@ class Log {
   }
   // For LOG_EVERY_N_SECS:
   Log(const char* file, int line, LOG_LEVEL lvl, std::atomic<int64_t>& t, int N)
-      : lvl_(lvl), os_(&sb_) {
+      : lvl_(lvl) {
     if (lvl < min_log_level) {
       skip_ = true;
       return;
@@ -83,7 +83,7 @@ class Log {
   ~Log() {
     if (skip_) return;
     os_ << std::endl;
-    (lvl_ < WARN ? std::cerr : std::cout) << sb_.str();
+    (lvl_ < WARN ? std::cerr : std::cout) << os_.str();
     if (lvl_ == 0) {
       abort();
     }
@@ -118,6 +118,5 @@ class Log {
 
   LOG_LEVEL lvl_;
   bool skip_ = false;
-  std::stringbuf sb_;
-  std::ostream os_;
+  std::stringstream os_;
 };
