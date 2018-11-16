@@ -74,6 +74,7 @@ bool SetAffinity(int id) {
   CPU_ZERO(&cset);
   CPU_SET(id, &cset);
   err = sched_setaffinity(0, sizeof(cset), &cset);
+  std::atomic_thread_fence(std::memory_order_seq_cst);
   if (err) {
     err = errno;
   }
@@ -86,6 +87,7 @@ bool SetAffinity(int id) {
   }
   cpuset_set(id, cset);
   err = pthread_setaffinity_np(pthread_self(), cpuset_size(cset), cset);
+  std::atomic_thread_fence(std::memory_order_seq_cst);
   cpuset_destroy(cset);
 #endif
   if (err != 0) {
@@ -104,16 +106,17 @@ std::vector<std::string> ReadDict() {
   std::ifstream f;
 
   for (const auto &d : dicts) {
-    f.open(d);
-    if (f.good()) break;
+    f.open(d, std::ifstream::in);
+    if (f.is_open()) break;
+    f.clear();
   }
 
-  if (!f.good()) return words;
+  if (!f.is_open()) return words;
 
   LOG(DEBUG) << "Reading words.";
 
   std::string word;
-  while (f.good()) {
+  while (!f.eof()) {
     std::getline(f, word);
     words.push_back(word);
   }
@@ -128,7 +131,7 @@ std::vector<std::string> ReadDict() {
 
 class Worker {
  public:
-  Worker(std::vector<std::string> *words, int tid)
+  Worker(const std::vector<std::string> *words, int tid)
       : tid_(tid), words_(words), rndeng_(std::random_device()()) {}
   ~Worker() {}
   void Run();
@@ -138,8 +141,8 @@ class Worker {
   void FillBufferRandomText(std::string *s);
   void MaybeMadviseDontNeed(std::string *s);
 
-  int tid_;
-  std::vector<std::string> *words_;
+  const int tid_;
+  const std::vector<std::string> *words_;
   // We don't really need "good" random numbers.
   // std::mt19937_64 rndeng_;
   std::knuth_b rndeng_;
@@ -344,7 +347,7 @@ void Worker::Run() {
       SetAffinity(tid_);
     }
     int err;
-    uint32_t bufsize = BufSize();
+    int32_t bufsize = BufSize();
     if (bufsize < 8) bufsize = 8;
     if (bufsize > BUF_MAX) bufsize = BUF_MAX;
     src_buf.resize(bufsize);
@@ -384,7 +387,7 @@ void Worker::Run() {
 
     const unsigned char key[33] = "0123456789abcdef0123456789abcdef";
     std::string ivec(12, 0);
-    unsigned char gmac[14];
+    unsigned char gmac[16];
     FillBufferRandomData(&ivec);
 
     int enc_len = 0, enc_unused_len = 0;
@@ -416,7 +419,7 @@ void Worker::Run() {
       dst_buf.erase();
       continue;
     }
-    if (EVP_CIPHER_CTX_ctrl(cipher_ctx, EVP_CTRL_GCM_GET_TAG, 16, gmac) != 1) {
+    if (EVP_CIPHER_CTX_ctrl(cipher_ctx, EVP_CTRL_GCM_GET_TAG, sizeof(gmac), gmac) != 1) {
       LOG(ERROR) << "tid " << tid_ << " EVP_CTRL_GCM_GET_TAG failed.";
       errorCount++;
       EVP_CIPHER_CTX_cleanup(cipher_ctx);
@@ -473,7 +476,7 @@ void Worker::Run() {
                       (unsigned char *)ivec.data(), 0);
     dst_buf.resize(src_buf.size());
     MaybeMadviseDontNeed(&dst_buf);
-    if (EVP_CIPHER_CTX_ctrl(cipher_ctx, EVP_CTRL_GCM_SET_TAG, 16, gmac) != 1) {
+    if (EVP_CIPHER_CTX_ctrl(cipher_ctx, EVP_CTRL_GCM_SET_TAG, sizeof(gmac), gmac) != 1) {
       LOG(ERROR) << "tid " << tid_ << " EVP_CTRL_GCM_SET_TAG failed.";
       errorCount++;
       EVP_CIPHER_CTX_cleanup(cipher_ctx);
