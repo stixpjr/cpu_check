@@ -413,13 +413,15 @@ void Worker::Run() {
       continue;
     }
     enc_len += enc_unused_len;
-    if (enc_len != (int) dst_buf.size()) {
-      LOG(ERROR) << "tid " << tid_ << " encrypt length mismatch: " << enc_len << " vs " << dst_buf.size();
+    if (enc_len != (int)dst_buf.size()) {
+      LOG(ERROR) << "tid " << tid_ << " encrypt length mismatch: " << enc_len
+                 << " vs " << dst_buf.size();
       EVP_CIPHER_CTX_cleanup(cipher_ctx);
       dst_buf.erase();
       continue;
     }
-    if (EVP_CIPHER_CTX_ctrl(cipher_ctx, EVP_CTRL_GCM_GET_TAG, sizeof(gmac), gmac) != 1) {
+    if (EVP_CIPHER_CTX_ctrl(cipher_ctx, EVP_CTRL_GCM_GET_TAG, sizeof(gmac),
+                            gmac) != 1) {
       LOG(ERROR) << "tid " << tid_ << " EVP_CTRL_GCM_GET_TAG failed.";
       errorCount++;
       EVP_CIPHER_CTX_cleanup(cipher_ctx);
@@ -476,7 +478,8 @@ void Worker::Run() {
                       (unsigned char *)ivec.data(), 0);
     dst_buf.resize(src_buf.size());
     MaybeMadviseDontNeed(&dst_buf);
-    if (EVP_CIPHER_CTX_ctrl(cipher_ctx, EVP_CTRL_GCM_SET_TAG, sizeof(gmac), gmac) != 1) {
+    if (EVP_CIPHER_CTX_ctrl(cipher_ctx, EVP_CTRL_GCM_SET_TAG, sizeof(gmac),
+                            gmac) != 1) {
       LOG(ERROR) << "tid " << tid_ << " EVP_CTRL_GCM_SET_TAG failed.";
       errorCount++;
       EVP_CIPHER_CTX_cleanup(cipher_ctx);
@@ -492,7 +495,8 @@ void Worker::Run() {
       dst_buf.erase();
       continue;
     }
-    if (EVP_CipherFinal_ex(cipher_ctx, (unsigned char *)&dst_buf[dec_len], &dec_extra_len) != 1) {
+    if (EVP_CipherFinal_ex(cipher_ctx, (unsigned char *)&dst_buf[dec_len],
+                           &dec_extra_len) != 1) {
       LOG(ERROR) << "tid " << tid_ << " decrypt EVP_CipherFinal_ex failed.";
       errorCount++;
       EVP_CIPHER_CTX_cleanup(cipher_ctx);
@@ -501,8 +505,9 @@ void Worker::Run() {
     }
     dec_len += dec_extra_len;
     EVP_CIPHER_CTX_cleanup(cipher_ctx);
-    if (dec_len != (int) dst_buf.size()) {
-      LOG(ERROR) << "tid " << tid_ << " decrypt length mismatch: " << dec_len << " vs " << dst_buf.size();
+    if (dec_len != (int)dst_buf.size()) {
+      LOG(ERROR) << "tid " << tid_ << " decrypt length mismatch: " << dec_len
+                 << " vs " << dst_buf.size();
       dst_buf.erase();
       continue;
     }
