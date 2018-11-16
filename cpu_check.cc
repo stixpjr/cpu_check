@@ -566,7 +566,7 @@ void Worker::Run() {
 }
 
 int main(int argc, char **argv) {
-  LOG(INFO) << "Starting " << argv[0];
+  LOG(INFO) << "Starting " << argv[0] << " version " cpu_check_VERSION;
   std::vector<std::thread *> tids;
   std::vector<Worker *> workers;
   std::vector<std::string> words = ReadDict();
