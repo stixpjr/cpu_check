@@ -353,10 +353,14 @@ void Worker::Run() {
     src_buf.resize(bufsize);
     auto &gen = generators[Gen()];
     auto &comp = compressors[Comp()];
-    LOG(DEBUG) << "tid " << tid_ << " " << gen.name << " size " << bufsize
-               << " " << comp.name << ".";
+    std::stringstream block_summary;
+    block_summary << gen.name << " size " << bufsize << " " << comp.name;
+    std::stringstream writer_info;
+    writer_info << "CPU tids (writer " << tid_ << ") " << block_summary.str()
+                << " ";
+
     (this->*gen.func)(&src_buf);
-    LOG(DEBUG) << "tid " << tid_ << " gen done.";
+    LOG(DEBUG) << writer_info.str() << "gen done.";
 
     // Run all the hash funcs.
 
@@ -364,23 +368,22 @@ void Worker::Run() {
       if (exiting) break;
       hashes[i] = hashers[i].func(src_buf);
     }
-    LOG(DEBUG) << "tid " << tid_ << " initial hashes done.";
+    LOG(DEBUG) << writer_info.str() << "initial hashes done.";
     if (exiting) break;
 
     // Run our randomly chosen compressor.
 
     err = comp.enc(&dst_buf, src_buf);
-    LOG(DEBUG) << "tid " << tid_ << " src_buf.size(): " << src_buf.size()
+    LOG(DEBUG) << writer_info.str() << "src_buf.size(): " << src_buf.size()
                << ", dst_buf.size(): " << dst_buf.size() << ".";
     std::swap(src_buf, dst_buf);
     dst_buf.clear();
     if (err) {
-      LOG(ERROR) << "tid " << tid_ << " " << gen.name << " size " << bufsize
-                 << " " << comp.name << " compression failed: " << err;
+      LOG(ERROR) << writer_info.str() << "compression failed: " << err;
       errorCount++;
       continue;
     }
-    LOG(DEBUG) << "tid " << tid_ << " compress done.";
+    LOG(DEBUG) << writer_info.str() << "compress done.";
     if (exiting) break;
 
     // Encrypt.
@@ -399,14 +402,14 @@ void Worker::Run() {
     if (EVP_CipherUpdate(cipher_ctx, (unsigned char *)&dst_buf[0], &enc_len,
                          (unsigned char *)src_buf.data(),
                          src_buf.size()) != 1) {
-      LOG(ERROR) << "tid " << tid_ << " EVP_CipherUpdate failed.";
+      LOG(ERROR) << writer_info.str() << "EVP_CipherUpdate failed";
       errorCount++;
       EVP_CIPHER_CTX_cleanup(cipher_ctx);
       dst_buf.erase();
       continue;
     }
     if (EVP_CipherFinal_ex(cipher_ctx, nullptr, &enc_unused_len) != 1) {
-      LOG(ERROR) << "tid " << tid_ << " encrypt EVP_CipherFinal_ex failed.";
+      LOG(ERROR) << writer_info.str() << "encrypt EVP_CipherFinal_ex failed";
       errorCount++;
       EVP_CIPHER_CTX_cleanup(cipher_ctx);
       dst_buf.erase();
@@ -414,15 +417,16 @@ void Worker::Run() {
     }
     enc_len += enc_unused_len;
     if (enc_len != (int)dst_buf.size()) {
-      LOG(ERROR) << "tid " << tid_ << " encrypt length mismatch: " << enc_len
+      LOG(ERROR) << writer_info.str() << "encrypt length mismatch: " << enc_len
                  << " vs " << dst_buf.size();
+      errorCount++;
       EVP_CIPHER_CTX_cleanup(cipher_ctx);
       dst_buf.erase();
       continue;
     }
     if (EVP_CIPHER_CTX_ctrl(cipher_ctx, EVP_CTRL_GCM_GET_TAG, sizeof(gmac),
                             gmac) != 1) {
-      LOG(ERROR) << "tid " << tid_ << " EVP_CTRL_GCM_GET_TAG failed.";
+      LOG(ERROR) << writer_info.str() << "EVP_CTRL_GCM_GET_TAG failed";
       errorCount++;
       EVP_CIPHER_CTX_cleanup(cipher_ctx);
       dst_buf.erase();
@@ -431,7 +435,7 @@ void Worker::Run() {
     EVP_CIPHER_CTX_cleanup(cipher_ctx);
     std::swap(src_buf, dst_buf);
     dst_buf.clear();
-    LOG(DEBUG) << "tid " << tid_ << " encrypt done.";
+    LOG(DEBUG) << writer_info.str() << "encrypt done.";
     if (exiting) break;
 
     // Make a copy.
@@ -468,8 +472,8 @@ void Worker::Run() {
     }
 
     std::stringstream writer_reader;
-    writer_reader << "CPUs writer (tid " << tid_ << "), reader (tid " << newcpu
-                  << ")";
+    writer_reader << "CPU tids (writer " << tid_ << " reader " << newcpu << ") "
+                  << block_summary.str() << " ";
 
     // Decrypt.
 
@@ -480,7 +484,7 @@ void Worker::Run() {
     MaybeMadviseDontNeed(&dst_buf);
     if (EVP_CIPHER_CTX_ctrl(cipher_ctx, EVP_CTRL_GCM_SET_TAG, sizeof(gmac),
                             gmac) != 1) {
-      LOG(ERROR) << "tid " << tid_ << " EVP_CTRL_GCM_SET_TAG failed.";
+      LOG(ERROR) << writer_reader.str() << "EVP_CTRL_GCM_SET_TAG failed";
       errorCount++;
       EVP_CIPHER_CTX_cleanup(cipher_ctx);
       dst_buf.erase();
@@ -489,7 +493,7 @@ void Worker::Run() {
     if (EVP_CipherUpdate(cipher_ctx, (unsigned char *)&dst_buf[0], &dec_len,
                          (unsigned char *)src_buf.data(),
                          src_buf.size()) != 1) {
-      LOG(ERROR) << "tid " << tid_ << " decryption failed.";
+      LOG(ERROR) << writer_reader.str() << "decryption failed";
       errorCount++;
       EVP_CIPHER_CTX_cleanup(cipher_ctx);
       dst_buf.erase();
@@ -497,7 +501,7 @@ void Worker::Run() {
     }
     if (EVP_CipherFinal_ex(cipher_ctx, (unsigned char *)&dst_buf[dec_len],
                            &dec_extra_len) != 1) {
-      LOG(ERROR) << "tid " << tid_ << " decrypt EVP_CipherFinal_ex failed.";
+      LOG(ERROR) << writer_reader.str() << "decrypt EVP_CipherFinal_ex failed";
       errorCount++;
       EVP_CIPHER_CTX_cleanup(cipher_ctx);
       dst_buf.erase();
@@ -506,14 +510,16 @@ void Worker::Run() {
     dec_len += dec_extra_len;
     EVP_CIPHER_CTX_cleanup(cipher_ctx);
     if (dec_len != (int)dst_buf.size()) {
-      LOG(ERROR) << "tid " << tid_ << " decrypt length mismatch: " << dec_len
-                 << " vs " << dst_buf.size();
+      LOG(ERROR) << writer_reader.str()
+                 << "decrypt length mismatch: " << dec_len << " vs "
+                 << dst_buf.size();
+      errorCount++;
       dst_buf.erase();
       continue;
     }
     std::swap(src_buf, dst_buf);
     dst_buf.clear();
-    LOG(DEBUG) << "tid " << tid_ << " dencrypt done.";
+    LOG(DEBUG) << writer_reader.str() << "decrypt done.";
     if (exiting) break;
 
     // Run decompressor.
@@ -524,20 +530,18 @@ void Worker::Run() {
     std::swap(src_buf, dst_buf);
     dst_buf.clear();
     if (err) {
-      LOG(ERROR) << gen.name << " size " << bufsize << " " << comp.name
-                 << " uncompression failed: " << err << ". "
-                 << writer_reader.str();
+      LOG(ERROR) << writer_reader.str() << "uncompression failed: " << err;
       errorCount++;
       continue;
     }
     if (src_buf.size() != bufsize) {
-      LOG(ERROR) << gen.name << " " << comp.name
-                 << " uncompressed buffer size mismatch: should be " << bufsize
-                 << " got " << src_buf.size() << ". " << writer_reader.str();
+      LOG(ERROR) << writer_reader.str()
+                 << "uncompressed buffer size mismatch: should be " << bufsize
+                 << " got " << src_buf.size();
       errorCount++;
       continue;
     }
-    LOG(DEBUG) << "tid " << tid_ << " uncompress done.";
+    LOG(DEBUG) << writer_reader.str() << "uncompress done.";
 
     // Re-run hash funcs.
 
@@ -546,14 +550,13 @@ void Worker::Run() {
       if (exiting) break;
       std::string hash = hashers[i].func(src_buf);
       if (hashes[i] != hash) {
-        LOG(ERROR) << gen.name << " size " << bufsize << " " << comp.name << " "
-                   << hashers[i].name << " hash mismatch (" << hash << " vs "
-                   << hashes[i] << writer_reader.str();
+        LOG(ERROR) << writer_reader.str() << hashers[i].name
+                   << " hash mismatch (" << hash << " vs " << hashes[i];
         error = true;
         errorCount++;
       }
     }
-    LOG(DEBUG) << "tid " << tid_ << " rehash done.";
+    LOG(DEBUG) << writer_reader.str() << "rehash done.";
 
     // Cleanup
     src_buf.clear();
