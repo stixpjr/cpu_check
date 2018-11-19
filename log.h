@@ -84,7 +84,7 @@ class Log {
     if (skip_) return;
     os_ << std::endl;
     (lvl_ < WARN ? std::cerr : std::cout) << os_.str();
-    if (lvl_ == 0) {
+    if (lvl_ == FATAL) {
       abort();
     }
   }
