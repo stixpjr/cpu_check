@@ -1,10 +1,12 @@
 cmake_minimum_required (VERSION 3.2)
-project (cpu_check VERSION 20181116 LANGUAGES C CXX)
+project (cpu_check VERSION 20181128 LANGUAGES C CXX)
 
 # Options
 # Use clang/llvm by default.
-# There's unexplained SEGVs with gcc 5.5.0 with -O2
 option(USE_CLANG "build with clang" ON)
+# Build semi-statically by default.
+option(BUILD_STATIC "build targets semi-statically linked" ON)
+
 if (NOT CMAKE_BUILD_TYPE)
 	set(CMAKE_BUILD_TYPE Release)
 endif(NOT CMAKE_BUILD_TYPE)
@@ -50,6 +52,10 @@ endif(ARCH_SANDYBRIDGE)
 
 target_link_libraries(cpu_check crc32c farmhash)
 target_link_libraries(crc32c_test crc32c)
+
+if (BUILD_STATIC)
+	set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
+endif(BUILD_STATIC)
 
 # Needs pthreads
 find_package(Threads REQUIRED)

@@ -20,7 +20,7 @@ Algorithms are chosen to exercise various hardware extensions. Eg. on x86_64, SS
 
 ## Prerequisites:
 
-Designed to run under Unix/Linux OS. There is a preference for the Clang/LLVM compiler, as I've found unexplained SEGV when built with gcc 5.5 and -O2 on x86.
+Designed to run under Unix/Linux OS.
 
 * cmake: https://cmake.org/
 * zlib
@@ -46,6 +46,7 @@ to cmake via, eg:
 
 * CMAKE_BUILD_TYPE=(Release|Debug)
 * USE_CLANG=(ON|OFF)
+* BUILD_STATIC=(ON|OFF)
 
 ## TODO:
 
