@@ -75,4 +75,10 @@ find_package (OpenSSL REQUIRED)
 include_directories(${OPENSSL_INCLUDE_DIRS})
 target_link_libraries(cpu_check ${OPENSSL_LIBRARIES})
 
+# Static linking of OpenSSL may require -ldl, link it if found.
+find_library (dl dl)
+if(dl)
+	target_link_libraries(cpu_check dl)
+endif(dl)
+
 install (TARGETS cpu_check DESTINATION bin)
