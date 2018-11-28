@@ -347,7 +347,7 @@ void Worker::Run() {
       SetAffinity(tid_);
     }
     int err;
-    int32_t bufsize = BufSize();
+    uint32_t bufsize = BufSize();
     if (bufsize < 8) bufsize = 8;
     if (bufsize > BUF_MAX) bufsize = BUF_MAX;
     src_buf.resize(bufsize);
