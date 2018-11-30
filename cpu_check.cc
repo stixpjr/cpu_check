@@ -67,8 +67,9 @@ std::atomic_bool exiting(false);
 std::atomic_uintmax_t errorCount(0);
 std::atomic_uintmax_t successCount(0);
 
-bool SetAffinity(int id) {
+std::string SetAffinity(int id) {
   int err = 0;
+  std::stringstream error;
 #ifdef __linux__
   cpu_set_t cset;
   CPU_ZERO(&cset);
@@ -82,8 +83,8 @@ bool SetAffinity(int id) {
   cpuset_t *cset;
   cset = cpuset_create();
   if (cset == nullptr) {
-    LOG(ERROR) << "cpuset_create failed: " << strerror(errno);
-    return false;
+    error << "cpuset_create failed: " << strerror(errno);
+    return error.str();
   }
   cpuset_set(id, cset);
   err = pthread_setaffinity_np(pthread_self(), cpuset_size(cset), cset);
@@ -91,9 +92,9 @@ bool SetAffinity(int id) {
   cpuset_destroy(cset);
 #endif
   if (err != 0) {
-    LOG(ERROR) << "setaffinity failed: " << strerror(err);
+    error << "setaffinity to " << id << " failed: " << strerror(err);
   }
-  return err == 0;
+  return error.str();
 }
 
 std::vector<std::string> ReadDict() {
@@ -344,7 +345,13 @@ void Worker::Run() {
 
   while (!exiting) {
     if (std::thread::hardware_concurrency() > 1) {
-      SetAffinity(tid_);
+      std::string error = SetAffinity(tid_);
+      if (!error.empty()) {
+        LOG(WARN) << "Unable to set tid " << tid_ << " affinity: " << error
+                  << ". Sleeping.";
+        sleep(30);
+        continue;
+      }
     }
     int err;
     uint32_t bufsize = BufSize();
@@ -458,17 +465,28 @@ void Worker::Run() {
 
     int newcpu = tid_;
     if (std::thread::hardware_concurrency() > 1) {
+      std::string error;
       std::vector<int> cpus;
       for (int i = 0; i < static_cast<int>(std::thread::hardware_concurrency());
            i++) {
         if (i == tid_) continue;
         cpus.push_back(i);
       }
-      int cpuoff =
-          std::uniform_int_distribution<int>(0, cpus.size() - 1)(rndeng_);
-      newcpu = cpus[cpuoff];
-      cpus.erase(cpus.begin() + cpuoff);
-      SetAffinity(newcpu);
+      while (!cpus.empty()) {
+        int cpuoff =
+            std::uniform_int_distribution<int>(0, cpus.size() - 1)(rndeng_);
+        newcpu = cpus[cpuoff];
+        cpus.erase(cpus.begin() + cpuoff);
+        error = SetAffinity(newcpu);
+        if (error.empty()) {
+          break;
+        }
+      }
+      if (!error.empty()) {
+        // Couldn't find an alternate cpu to validate on, so we're still on the
+        // original cpu.
+        newcpu = tid_;
+      }
     }
 
     std::stringstream writer_reader;
