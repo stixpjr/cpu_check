@@ -1,5 +1,5 @@
 cmake_minimum_required (VERSION 3.2)
-project (cpu_check VERSION 20181128 LANGUAGES C CXX)
+project (cpu_check VERSION 20181130 LANGUAGES C CXX)
 
 # Options
 # Use clang/llvm by default.
