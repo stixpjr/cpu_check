@@ -24,7 +24,7 @@ Designed to run under Unix/Linux OS.
 
 * cmake: https://cmake.org/
 * zlib
-* OpenSSL
+* OpenSSL/BoringSSL
 
 ## Building
 
@@ -61,3 +61,11 @@ to cmake via, eg:
 * Flags to enable/disable steps, eg. encryption.
 * Flags controlling min/max buffer size.
 * Use cpuid to dynamically select appropriate instruction set extensions.
+* Query ACPI/cpuid for more meaningful CPU identification.
+* Extra x86_64 instruction coverage:
+  * movnti (SSE2 mov doubleword with non-temporal hint)
+  * prefetch*
+  * movbe (mov with byte swap)
+* Consider floating point tests?
+* Keep stats on corruptions (eg. buffer lengths/alignments, detection means (crc32), etc).
+* Try to narrow down corruptions automatically.
